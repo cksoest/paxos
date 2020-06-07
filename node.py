@@ -5,3 +5,6 @@ class Node:
         self.node_id = node_type + str(node_id)
         self.failed = False
         self.records = []
+
+    def __str__(self):
+        return self.node_id

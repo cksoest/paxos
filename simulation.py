@@ -22,29 +22,38 @@ class Simulation:
 
     def run(self):
         for i in range(self.tmax):
-            if len(self.events) == 0:
-                return None
+            event = False
+            if len(self.events) > 0:
+                if self.events[0].tick == i:
+                    event = self.events[0]
+                    del self.events[0]
+                    for node in event.F:
+                        node.failed = True
+                    for node in event.R:
+                        node.failed = False
+                    if (event.msg_P is not None) and (event.msg_V is not None):
+                        propose_message = Message(i, None, event.msg_P, "PROPOSE", value=event.msg_V)
+                        propose_message.send(self.network)
+                    event = True
 
-            if self.events[0].tick == i:
-                event = self.events[0]
-                del self.events[0]
-                for node in event.F:
-                    node.failed = True
-                for node in event.R:
-                    node.failed = False
-                if (event.msg_P is not None) and (event.msg_V is not None):
-                    message = Message(None, event.msg_P, "PREPARE", value=event.msg_V)
-                    message.send(self.network)
-            else:
-                pass
-                # proces mesages from network
-
+            elif not event:
+                for proposal in self.proposals:
+                    for j in range(len(self.network)):
+                        if self.network[j].dst == proposal.node_id:
+                            message = self.network[j]
+                            del self.network[j]
+                            if message.message_type == "PROPOSE":
+                                for acceptor in self.acceptors:
+                                    prepare_message = Message(i, proposal, acceptor, "PREPARE", propose_id=self.propose_id)
+                                    prepare_message.send(self.network)
+                                self.propose_id += 1
 
 
 a = Simulation(1, 3, 15)
 a.set_events()
 a.run()
 print(a.network)
+print(a.events)
 
 
 # for p in a.P:
