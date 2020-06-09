@@ -12,13 +12,14 @@ class Simulation:
             raise Exception("maximum van tmax is 999")
         self.events = []
         self.network = []
-        self.propose_id = 0
+        self.queue = []
+        self.propose_id = 1
         self.proposals = [Node("P", i) for i in range(nP)]
         self.acceptors = [Node("A", i) for i in range(nP, nP+nA)]
         self.tmax = tmax
 
     def set_events(self):
-        self.events.append(Event(0, [], [], "P0", 42))
+        self.events.append(Event(0, [], [], self.proposals[0], 42))
 
     def run(self):
         for i in range(self.tmax):
@@ -38,26 +39,61 @@ class Simulation:
 
             elif not event:
                 for proposal in self.proposals:
-                    for j in range(len(self.network)):
-                        if self.network[j].dst == proposal.node_id:
-                            message = self.network[j]
-                            del self.network[j]
+                    for message in self.network:
+                        if message.dst == proposal:
                             if message.message_type == "PROPOSE":
                                 for acceptor in self.acceptors:
                                     prepare_message = Message(i, proposal, acceptor, "PREPARE", propose_id=self.propose_id)
-                                    prepare_message.send(self.network)
+                                    prepare_message.send(self.queue)
+                                proposal.propose_value = message.value = message.value
+                                proposal.promise_request = self.propose_id
                                 self.propose_id += 1
 
+                            if message.message_type == "PROMISE":
+                                if message.propose_id == proposal.promise_request:
+                                    proposal.promise_received += 1
+                                    if proposal.promise_received > len(self.acceptors)/2:
+                                        for acceptor in self.acceptors:
+                                            accept_message = Message(i, proposal, acceptor, "ACCEPT", propose_id=message.propose_id, value=proposal.propose_value)
+                                            accept_message.send(self.queue)
+                                        proposal.promise_received = 0
+
+                            if message.message_type == "ACCEPTED":
+                                if message.propose_id == proposal.promise_request and message.value == proposal.propose_value:
+                                    proposal.accepted_received += 1
+                                    if proposal.accepted_received > len(self.acceptors)/2:
+                                        proposal.accepted_received = 0
+                                        proposal.propose_value = None
+                                        # TODO state to sleep
+
+                            self.network.remove(message)
+
+                for acceptor in self.acceptors:
+                    for message in self.network:
+                        if message.dst == acceptor:
+                            if message.message_type == "PREPARE":
+                                if message.propose_id > acceptor.promised:
+                                    acceptor.promised = message.propose_id
+                                    promise_message = Message(i, acceptor, message.src, "PROMISE", propose_id=message.propose_id)
+                                    promise_message.send(self.queue)
+
+                            if message.message_type == "ACCEPT":
+                                if message.propose_id == acceptor.promised:
+                                    acceptor.records.append(message.value)
+                                    accepted_message = Message(i, acceptor, message.src, "ACCEPTED", propose_id=message.propose_id, value=message.value)
+                                    accepted_message.send(self.queue)
+
+                            self.network.remove(message)
+
+                self.network += self.queue
+                self.queue = []
 
 a = Simulation(1, 3, 15)
 a.set_events()
 a.run()
 print(a.network)
 print(a.events)
+print(a.queue)
 
-
-# for p in a.P:
-#     print(p.node_id)
-#
-# for b in a.A:
-#     print(b.node_id)
+for ui in a.acceptors:
+    print(ui.records)
