@@ -6,10 +6,9 @@ class Node:
         self.failed = False
         self.records = []
         self.state = "SLEEP"
-        self.promise_request = 0
-        self.promise_received = 0
+        self.propose_id = 0
         self.propose_value = None
-
+        self.promise_received = 0
         self.accepted_received = 0
 
     def __str__(self):

@@ -13,4 +13,4 @@ class Message:
         print(self)
 
     def __str__(self):
-        return str(self.tick) + " " + str(self.src) + " " + "->" + " " + str(self.dst) + " " + self.message_type + " " + str(self.propose_id) + " " + str(self.value)
+        return str(self.tick) + " " + str(self.src) + " " + "->" + " " + str(self.dst) + " " + self.message_type + " propose_id=" + str(self.propose_id) + " value=" + str(self.value)

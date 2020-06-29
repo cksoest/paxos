@@ -20,75 +20,91 @@ class Simulation:
 
     def set_events(self):
         self.events.append(Event(0, [], [], self.proposals[0], 42))
+        self.events.append(Event(3, [], [], self.proposals[1], 400))
+        self.events.append(Event(17, [], [], self.proposals[0], 1000))
 
     def run(self):
         for i in range(self.tmax):
-            event = False
-            if len(self.events) > 0:
-                if self.events[0].tick == i:
-                    event = self.events[0]
-                    del self.events[0]
-                    for node in event.F:
+            ran_event = False
+            for event in self.events:
+                if event.tick == i:
+                    for node in event.failed:
                         node.failed = True
-                    for node in event.R:
+                    for node in event.recovered:
                         node.failed = False
-                    if (event.msg_P is not None) and (event.msg_V is not None):
-                        propose_message = Message(i, None, event.msg_P, "PROPOSE", value=event.msg_V)
-                        propose_message.send(self.network)
-                    event = True
+                    if (event.proposal is not None) and (event.value is not None):
+                        propose_message = Message(i, None, event.proposal, "PROPOSE", value=event.value)
+                        propose_message.send(self.queue)
+                    self.events.remove(event)
+                    ran_event = True
 
-            elif not event:
+            if not ran_event:
                 for proposal in self.proposals:
                     for message in self.network:
                         if message.dst == proposal:
-                            if message.message_type == "PROPOSE":
+
+                            if message.message_type == "PROPOSE" and proposal.state == "SLEEP":
                                 for acceptor in self.acceptors:
                                     prepare_message = Message(i, proposal, acceptor, "PREPARE", propose_id=self.propose_id)
                                     prepare_message.send(self.queue)
                                 proposal.propose_value = message.value = message.value
-                                proposal.promise_request = self.propose_id
+                                proposal.propose_id = self.propose_id
                                 self.propose_id += 1
+                                proposal.state = "ACTIVE"
 
                             if message.message_type == "PROMISE":
-                                if message.propose_id == proposal.promise_request:
+                                if message.propose_id == proposal.propose_id:
                                     proposal.promise_received += 1
                                     if proposal.promise_received > len(self.acceptors)/2:
                                         for acceptor in self.acceptors:
                                             accept_message = Message(i, proposal, acceptor, "ACCEPT", propose_id=message.propose_id, value=proposal.propose_value)
                                             accept_message.send(self.queue)
                                         proposal.promise_received = 0
+                                        for m in self.network:
+                                            if m.message_type == "PROMISE" and m.dst == proposal and m.propose_id == proposal.propose_id:
+                                                if m != message:
+                                                    self.network.remove(m)
 
                             if message.message_type == "ACCEPTED":
-                                if message.propose_id == proposal.promise_request and message.value == proposal.propose_value:
+                                if message.propose_id == proposal.propose_id and message.value == proposal.propose_value:
                                     proposal.accepted_received += 1
                                     if proposal.accepted_received > len(self.acceptors)/2:
                                         proposal.accepted_received = 0
                                         proposal.propose_value = None
-                                        # TODO state to sleep
+                                        proposal.propose_id = None
+                                        proposal.state = "SLEEP"
+                                        for m in self.network:
+                                            if m.message_type == "ACCEPTED" and m.dst == proposal and m.propose_id == proposal.propose_id:
+                                                if m != message:
+                                                    self.network.remove(m)
 
                             self.network.remove(message)
 
                 for acceptor in self.acceptors:
                     for message in self.network:
                         if message.dst == acceptor:
-                            if message.message_type == "PREPARE":
+
+                            if message.message_type == "PREPARE" and acceptor.state == "SLEEP":
                                 if message.propose_id > acceptor.promised:
                                     acceptor.promised = message.propose_id
                                     promise_message = Message(i, acceptor, message.src, "PROMISE", propose_id=message.propose_id)
                                     promise_message.send(self.queue)
+                                    acceptor.state = "ACTIVE"
 
                             if message.message_type == "ACCEPT":
                                 if message.propose_id == acceptor.promised:
-                                    acceptor.records.append(message.value)
+                                    acceptor.records.append({"propose_id": message.propose_id, "value": message.value})
                                     accepted_message = Message(i, acceptor, message.src, "ACCEPTED", propose_id=message.propose_id, value=message.value)
                                     accepted_message.send(self.queue)
+                                    acceptor.state = "SLEEP"
 
                             self.network.remove(message)
 
-                self.network += self.queue
-                self.queue = []
+            self.network += self.queue
+            self.queue = []
 
-a = Simulation(1, 3, 15)
+
+a = Simulation(2, 5, 150)
 a.set_events()
 a.run()
 print(a.network)

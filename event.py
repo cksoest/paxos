@@ -1,8 +1,8 @@
 class Event:
 
-    def __init__(self, tick, F, R, msg_P, msg_V):
+    def __init__(self, tick, failed, recovered, proposal, value):
         self.tick = tick
-        self.F = F
-        self.R = R
-        self.msg_P = msg_P
-        self.msg_V = msg_V
+        self.failed = failed
+        self.recovered = recovered
+        self.proposal = proposal
+        self.value = value
